@@ -63,53 +63,119 @@ function! s:getTasks(json) abort
     endfor
 endfunction
 
-function! s:extractTask(oriTask)
+function! s:extractTask(oriTask) abort
     let l:task = {
     \   "desc": a:oriTask["label"],
     \   "command": "echo '[X] THIS TASK NOT SUPPORT'"
     \}
-    if a:oriTask["type"] != "shell"
+    if has_key(a:oriTask, "type") && a:oriTask["type"] != "shell"
         return l:task
     endif
     if has_key(a:oriTask, "command")
         let l:task["command"] = a:oriTask["command"]
+        if has_key(a:oriTask, "args")
+            let l:task["command"] .= " ".join(a:oriTask["args"], " ")
+        endif
     endif
     if has("unix") && has_key(a:oriTask, "linux") && has_key(a:oriTask["linux"], "command")
         let l:task["command"] = a:oriTask["linux"]["command"]
+        if has_key(a:oriTask["linux"], "args")
+            let l:task["command"] .= " ".join(a:oriTask["linux"]["args"], " ")
+        endif
     endif
     if has("mac") && has_key(a:oriTask, "osx") && has_key(a:oriTask["osx"], "command")
         let l:task["command"] = a:oriTask["osx"]["command"]
+        if has_key(a:oriTask["osx"], "args")
+            let l:task["command"] .= " ".join(a:oriTask[["osx"]"args"], " ")
+        endif
     endif
     if (has("win32") || has("win64")) && has_key(a:oriTask, "windows") && has_key(a:oriTask["windows"], "command")
         let l:task["command"] = a:oriTask["windows"]["command"]
+        if has_key(a:oriTask["windows"], "args")
+            let l:task["command"] .= " ".join(a:oriTask["windows"]["args"], " ")
+        endif
     endif
     return l:task
 endfunction
 
 function! s:getInputs(json) abort
     let s:input_list = []
+    let s:id2input = {}
     if !has_key(a:json, "inputs")
         return
     endif
     let l:inputs = a:json['inputs']
     for input in l:inputs
-        call add(s:input_list, s:extractInput(input))
+        let input = s:extractInput(input)
+        let s:id2input[input["id"]] = input
     endfor
 endfunction
 
-function! s:extractInput(oriInput)
-    "#~TODO
+function! s:extractInput(oriInput) abort
+    let l:input = {
+    \   "id": a:oriInput["id"],
+    \   "arg_1": "[?] unknown: ",
+    \   "arg_2": "",
+    \   "func": 's:userInput'
+    \}
+    if a:oriInput["type"] == "promptString"
+        let l:input["arg_1"] = a:oriInput["description"]
+        if has_key(a:oriInput, "default")
+            let l:input["arg_2"] = a:oriInput["default"]
+        endif
+        if has_key(a:oriInput, "password") && a:oriInput["password"]
+            let l:input["func"] = 's:userInputSecret'
+        endif
+    elseif a:oriInput["type"] == "pickString"
+        let l:input["arg_1"] = a:oriInput["description"]
+        let l:input["arg_2"] = a:oriInput["options"]
+        let l:input["func"] = 's:userChoice'
+    elseif a:oriInput["type"] == "command"
+        let l:input["arg_1"] = a:oriInput["command"]
+        let l:input["arg_2"] = join(a:oriInput["args"], " ")
+        let l:input["func"] = 's:userCommand'
+    endif
+    return l:input
 endfunction
 
 function! tinySpy#runTask() abort
     if !exists("s:vscode_path") && tinySpy#intercept() == 1
         return
     endif
+    call s:getVar()
     let l:command = s:selectTask()
     if l:command == 1
         return
     endif
-    "#~TODO check input, replace input, run command
+    "#~TODO check input, replace input & variables, run command
+endfunction
+
+function! s:getVar() abort
+    let l:workspace = fnamemodify(s:vscode_path."/..", ":p:h")
+    let l:workspace_folder = fnamemodify(l:workspace, ":t")
+    let l:file_path = expand("%:p")
+    let l:file_relative_path = substitute(l:file_path, l:workspace . '/', "", "")
+    let l:file_name = fnamemodify(l:file_path, ":t")
+    let s:vars = {
+    \   "userHome": $HOME,
+    \   "workspaceFolder": l:workspace,
+    \   "workspaceFolderBasename": l:workspace_folder,
+    \   "file": l:file_path,
+    \   "fileWorkspaceFolder": l:workspace,
+    \   "relativeFile": l:file_relative_path,
+    \   "relativeFileDirname": fnamemodify(l:file_relative_path, ":h"),
+    \   "fileBasename": l:file_name,
+    \   "fileBasenameNoExtension": fnamemodify(l:file_name, ":r"),
+    \   "fileDirname": fnamemodify(l:file_path, ":h"),
+    \   "fileExtname": fnamemodify(l:file_name, ":e"),
+    \   "lineNumber": line('.'),
+    \   "selectedText": "unknown",
+    \   "execPath": "unknown",
+    \   "pathSeparator": '/'
+    \}
+    if has("win32") || has("win64")
+        s:vars["pathSeparator"] = '\'
+    endif
 endfunction
 
 function! s:selectTask() abort
@@ -130,6 +196,15 @@ endfunction
 function! s:userInput(desc, default) abort
     let l:input = input(a:desc, a:default)
     return l:input
+endfunction
+
+function! s:userInputSecret(desc, default) abort
+    let l:input = inputsecret(a:desc, a:default)
+    return l:input
+endfunction
+
+function! s:userCommand(cmd, args) abort
+    return substitute(system(cmd." ".args), "\n", "", "")
 endfunction
 
 function! s:termRun(command) abort
