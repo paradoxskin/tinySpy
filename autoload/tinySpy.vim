@@ -9,6 +9,7 @@ function! tinySpy#intercept() abort
         return 1
     endif
     let s:vscode_path = l:vscode_path
+    let s:workspace_path = fnamemodify(l:vscode_path."/..", ":p:h")
     if s:hasTasks()
         let s:task_path = s:vscode_path . "/tasks.json"
         if s:readJson() == 1
@@ -119,7 +120,7 @@ function! s:extractInput(oriInput) abort
     \   "func": 's:userInput'
     \}
     if a:oriInput["type"] == "promptString"
-        let l:input["arg_1"] = a:oriInput["description"]
+        let l:input["arg_1"] = a:oriInput["description"].": "
         if has_key(a:oriInput, "default")
             let l:input["arg_2"] = a:oriInput["default"]
         endif
@@ -127,7 +128,7 @@ function! s:extractInput(oriInput) abort
             let l:input["func"] = 's:userInputSecret'
         endif
     elseif a:oriInput["type"] == "pickString"
-        let l:input["arg_1"] = a:oriInput["description"]
+        let l:input["arg_1"] = a:oriInput["description"].": "
         let l:input["arg_2"] = a:oriInput["options"]
         let l:input["func"] = 's:userChoice'
     elseif a:oriInput["type"] == "command"
@@ -135,6 +136,7 @@ function! s:extractInput(oriInput) abort
         let l:input["arg_2"] = join(a:oriInput["args"], " ")
         let l:input["func"] = 's:userCommand'
     endif
+    let l:input["func"] = funcref(l:input["func"])
     return l:input
 endfunction
 
@@ -147,21 +149,23 @@ function! tinySpy#runTask() abort
     if l:command == 1
         return
     endif
-    "#~TODO check input, replace input & variables, run command
+    let l:real_cmd = s:getRealCommand(l:command)
+    if l:real_cmd == 1
+        return
+    endif
+    call s:termRun(l:real_cmd)
 endfunction
 
 function! s:getVar() abort
-    let l:workspace = fnamemodify(s:vscode_path."/..", ":p:h")
-    let l:workspace_folder = fnamemodify(l:workspace, ":t")
     let l:file_path = expand("%:p")
-    let l:file_relative_path = substitute(l:file_path, l:workspace . '/', "", "")
+    let l:file_relative_path = substitute(l:file_path, s:workspace_path . '/', "", "")
     let l:file_name = fnamemodify(l:file_path, ":t")
     let s:vars = {
     \   "userHome": $HOME,
-    \   "workspaceFolder": l:workspace,
-    \   "workspaceFolderBasename": l:workspace_folder,
+    \   "workspaceFolder": s:workspace_path,
+    \   "workspaceFolderBasename": fnamemodify(s:workspace_path, ":t"),
     \   "file": l:file_path,
-    \   "fileWorkspaceFolder": l:workspace,
+    \   "fileWorkspaceFolder": s:workspace_path,
     \   "relativeFile": l:file_relative_path,
     \   "relativeFileDirname": fnamemodify(l:file_relative_path, ":h"),
     \   "fileBasename": l:file_name,
@@ -186,11 +190,52 @@ function! s:selectTask() abort
     return s:desc2command[l:task]
 endfunction
 
+function! s:getRealCommand(command) abort
+    let l:real_cmd = ""
+    let l:idx = 0
+    while 1
+        let new_idx = match(a:command, "\${[^${}]\\+}", l:idx)
+        if new_idx == -1
+            let l:real_cmd .= a:command[l:idx:]
+            break
+        endif
+        let l:format = matchstr(a:command, "\${[^${}]\\+}", l:idx)
+        let l:value = s:fillFormat(l:format)
+        if l:value == ""
+            return 1
+        endif
+        let l:real_cmd .= a:command[l:idx:l:new_idx-1].l:value
+        let l:idx = l:new_idx + len(l:format)
+    endwhile
+    return l:real_cmd
+endfunction
+
+function! s:fillFormat(format) abort
+    let l:value = a:format
+    let l:format = substitute(a:format, " ", "", "g")
+    if match(l:format, ":") == -1
+        let l:key = l:format[2:-2]
+        if has_key(s:vars, l:key)
+            let l:value = s:vars[l:key]
+        endif
+    elseif l:format[:5] == "${env:"
+        let l:key = l:format[6:-2]
+        let l:value = substitute(system("echo $".l:key), "\n", "", "g")
+    elseif l:format[:7] == "${input:"
+        let l:key = l:format[8:-2]
+        if has_key(s:id2input, l:key)
+            let l:input = s:id2input[l:key]
+            let l:value = l:input["func"](l:input["arg_1"], l:input["arg_2"])
+        endif
+    endif
+    return l:value
+endfunction
+
 function! s:userChoice(desc, options) abort
     echo "[?] " . a:desc
     let l:choice = system("echo \"" . join(a:options, "\n") . "\" |fzf --height=10%")
     redraw!
-    return substitute(l:choice, "\n", "", "")
+    return substitute(l:choice, "\n", "", "g")
 endfunction
 
 function! s:userInput(desc, default) abort
@@ -204,11 +249,13 @@ function! s:userInputSecret(desc, default) abort
 endfunction
 
 function! s:userCommand(cmd, args) abort
-    return substitute(system(cmd." ".args), "\n", "", "")
+    return substitute(system(cmd." ".args), "\n", "", "g")
 endfunction
 
 function! s:termRun(command) abort
-    term_start("cd ". s:vscode_path ."/..;". a:command, {
-    \   "term_rows": 5,
+    call term_start("bash -c \"cd ". s:workspace_path.";".a:command.";echo [i] done.\"", {
+    \   "term_name": "~>",
+    \   "term_rows": 9,
     \})
+    wincmd w
 endfunction
