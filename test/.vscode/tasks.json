@@ -1,0 +1,53 @@
+{
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "linux": {
+                "command": "mkdir -p build;cd build;rm -rf ./*;cmake .."
+            }
+        },
+        {
+            "label": "compile",
+            "type": "shell",
+            "linux": {
+                "command": "cd build;make clean && make"
+            }
+        },
+        {
+            "label": "run",
+            "type": "shell",
+            "command": "build/testcase",
+            "args": [
+                "workspace_folder_is:${workspaceFolder}",
+                "PATH_is:${env:PATH}",
+                "ans_is:${input:question}",
+                "card_number_is:${input: card_number}",
+                "your_job_is:${input: job}"
+            ]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "question",
+            "type": "pickString",
+            "description": "tobe or noto_be",
+            "options": [
+                "tobe",
+                "noto_be"
+            ]
+        },
+        {
+            "id": "card_number",
+            "type": "promptString",
+            "description": "your card number",
+            "password": true
+        },
+        {
+            "id": "job",
+            "type": "promptString",
+            "description": "your job",
+            "password": false
+        }
+    ]
+}
