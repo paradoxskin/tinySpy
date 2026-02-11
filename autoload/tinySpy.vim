@@ -37,7 +37,7 @@ function! s:findVscodePath() abort
 endfunction
 
 function! s:hasTasks() abort
-    return (file_readable(s:vscode_path . "/tasks.json") == 1)
+    return (filereadable(s:vscode_path . "/tasks.json") == 1)
 endfunction
 
 function! s:readJson() abort
@@ -51,23 +51,27 @@ endfunction
 
 function! s:getTasks(json) abort
     let s:desc_list = []
-    let s:desc2command = {}
+    let s:command_list = []
+    let s:depends_list = []
+    let s:desc2index = {}
     if !has_key(a:json, "tasks")
         echo "[X] TASK NOT FOUND"
         return 1
     endif
-    let l:tasks = a:json['tasks']
-    for task in l:tasks
-        let task = s:extractTask(task)
-        let s:desc2command[task["desc"]] = task["command"]
+    for index in range(0, len(a:json['tasks']) - 1)
+        let task = s:extractTask(a:json['tasks'][index])
+        let s:desc2index[task["desc"]] = index
         call add(s:desc_list, task["desc"])
+        call add(s:command_list, task["command"])
+        call add(s:depends_list, task["depends"])
     endfor
 endfunction
 
 function! s:extractTask(oriTask) abort
     let l:task = {
     \   "desc": a:oriTask["label"],
-    \   "command": "echo '[X] THIS TASK NOT SUPPORT'"
+    \   "command": "echo '[i] A EMPTY TASK'",
+    \   "depends": [],
     \}
     if has_key(a:oriTask, "type") && a:oriTask["type"] != "shell"
         return l:task
@@ -77,6 +81,10 @@ function! s:extractTask(oriTask) abort
         if has_key(a:oriTask, "args")
             let l:task["command"] .= " ".join(a:oriTask["args"], " ")
         endif
+    endif
+    " whatever depends order, treat as sequence
+    if (has_key(a:oriTask, "dependsOn"))
+        let l:task["depends"] = a:oriTask["dependsOn"]
     endif
     if has("unix") && has_key(a:oriTask, "linux") && has_key(a:oriTask["linux"], "command")
         let l:task["command"] = a:oriTask["linux"]["command"]
@@ -145,15 +153,28 @@ function! tinySpy#runTask() abort
         return
     endif
     call s:getVar()
-    let l:command = s:selectTask()
-    if l:command == 1
+    let l:index = s:selectTask()
+    if l:index == -1
         return
     endif
-    let l:real_cmd = s:getRealCommand(l:command)
-    if l:real_cmd == 1
+    let l:depends_run_cmd = []
+    for depend in s:depends_list[index]
+        let l:depend_index = s:desc2index[depend]
+        let l:run_cmd = s:getRealCommand(s:command_list[l:depend_index])
+        if l:run_cmd == 1
+            return
+        endif
+        call add(l:depends_run_cmd, l:run_cmd)
+    endfor
+    let l:run_cmd = s:getRealCommand(s:command_list[l:index])
+    if l:run_cmd == 1
         return
     endif
-    call s:termRun(l:real_cmd)
+    for depend_run_cmd in l:depends_run_cmd
+        call s:termRun(depend_run_cmd)
+        call input("enter to continue")
+    endfor
+    call s:termRun(l:run_cmd)
 endfunction
 
 function! s:getVar() abort
@@ -185,9 +206,9 @@ endfunction
 function! s:selectTask() abort
     let l:task = s:userChoice("tasks:", s:desc_list)
     if l:task == ""
-        return 1
+        return -1
     endif
-    return s:desc2command[l:task]
+    return s:desc2index[l:task]
 endfunction
 
 function! s:getRealCommand(command) abort

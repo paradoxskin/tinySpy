@@ -1,21 +1,21 @@
 {
     "tasks": [
         {
-            "label": "build",
+            "label": "00 init",
             "type": "shell",
             "linux": {
-                "command": "mkdir -p build;cd build;rm -rf ./*;cmake .."
+                "command": "mkdir -p build && cd build && rm -rf ./*;cmake .."
             }
         },
         {
-            "label": "compile",
+            "label": "01 compile",
             "type": "shell",
             "linux": {
-                "command": "cd build;make clean && make"
+                "command": "cd build && make clean && make"
             }
         },
         {
-            "label": "run",
+            "label": "02 run",
             "type": "shell",
             "command": "build/testcase",
             "args": [
@@ -24,6 +24,14 @@
                 "ans_is:${input:question}",
                 "card_number_is:${input: card_number}",
                 "your_job_is:${input: job}"
+            ]
+        },
+        {
+            "label": "X01 build && run",
+            "dependsOn": [
+                "00 init",
+                "01 compile",
+                "02 run"
             ]
         },
         {
