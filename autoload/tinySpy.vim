@@ -253,7 +253,8 @@ function! s:userCommand(cmd, args) abort
 endfunction
 
 function! s:termRun(command) abort
-    call term_start("bash -c \"cd ". s:workspace_path.";".a:command.";echo [i] done.\"", {
+    let l:cmd = "cd ".shellescape(s:workspace_path)." && ".a:command.";echo [i] done."
+    call term_start(["bash", "-c", l:cmd], {
     \   "term_name": "~>",
     \   "term_rows": 9,
     \})

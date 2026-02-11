@@ -25,6 +25,11 @@
                 "card_number_is:${input: card_number}",
                 "your_job_is:${input: job}"
             ]
+        },
+        {
+            "label": "[test] 00 single quota in double quote with space",
+            "type": "shell",
+            "command": "echo \"'test pass'\""
         }
     ],
     "inputs": [
