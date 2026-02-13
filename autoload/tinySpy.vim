@@ -291,11 +291,19 @@ function! s:run_next_cmd(...) abort
 endfunction
 
 function! s:termRun(command) abort
+    let now_win = winnr()
+    let max_win = winnr("$")
+    if max_win == 1
+        botright 9split
+        let max_win += 1
+    endif
+    call win_gotoid(win_getid(max_win))
     let l:cmd = "cd ".shellescape(s:workspace_path)." && ".a:command.";echo [i] done."
     call term_start(["bash", "-c", l:cmd], {
     \   "term_name": s:desc_to_run[0],
     \   "term_rows": 9,
     \   "exit_cb": function("s:run_next_cmd"),
+    \   "curwin": 1
     \})
-    wincmd w
+    call win_gotoid(win_getid(now_win))
 endfunction
