@@ -165,23 +165,24 @@ function! tinySpy#runTask() abort
     if l:index == -1
         return
     endif
-    let l:depends_run_cmd = []
+    let s:cmd_to_run = []
+    let s:desc_to_run = []
     for depend in s:depends_list[index]
         let l:depend_index = s:desc2index[depend]
         let l:run_cmd = s:getRealCommand(s:command_list[l:depend_index])
         if l:run_cmd == 1
             return
         endif
-        call add(l:depends_run_cmd, l:run_cmd)
+        call add(s:cmd_to_run, l:run_cmd)
+        call add(s:desc_to_run, depend)
     endfor
     let l:run_cmd = s:getRealCommand(s:command_list[l:index])
     if l:run_cmd == 1
         return
     endif
-    for depend_run_cmd in l:depends_run_cmd
-        call s:termRun(depend_run_cmd)
-    endfor
-    call s:termRun(l:run_cmd)
+    call add(s:cmd_to_run, l:run_cmd)
+    call add(s:desc_to_run, s:desc_list[index])
+    call s:termRun(s:cmd_to_run[0])
 endfunction
 
 function! s:getVar() abort
@@ -280,11 +281,21 @@ function! s:userCommand(cmd, args) abort
     return substitute(system(cmd." ".args), "\n", "", "g")
 endfunction
 
+function! s:run_next_cmd(...) abort
+    call remove(s:cmd_to_run, 0)
+    call remove(s:desc_to_run, 0)
+    if len(s:cmd_to_run) == 0
+        return
+    endif
+    call s:termRun(s:cmd_to_run[0])
+endfunction
+
 function! s:termRun(command) abort
     let l:cmd = "cd ".shellescape(s:workspace_path)." && ".a:command.";echo [i] done."
     call term_start(["bash", "-c", l:cmd], {
-    \   "term_name": "~>",
+    \   "term_name": s:desc_to_run[0],
     \   "term_rows": 9,
+    \   "exit_cb": function("s:run_next_cmd"),
     \})
     wincmd w
 endfunction
