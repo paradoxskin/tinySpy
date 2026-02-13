@@ -4,7 +4,7 @@
             "label": "00 init",
             "type": "shell",
             "linux": {
-                "command": "mkdir -p build && cd build && rm -rf ./*;cmake .."
+                "command": "mkdir -p build && cd build && rm -rf ./*;cmake .. && sleep 10"
             }
         },
         {
@@ -38,6 +38,14 @@
             "label": "[test] 00 single quota in double quote with space",
             "type": "shell",
             "command": "echo \"'test pass'\""
+        },
+        {
+            "label": "[test] 01 double quote in arg",
+            "type": "shell",
+            "command": "echo",
+            "args": [
+                "hello\"world"
+            ]
         }
     ],
     "inputs": [

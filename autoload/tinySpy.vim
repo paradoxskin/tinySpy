@@ -67,6 +67,14 @@ function! s:getTasks(json) abort
     endfor
 endfunction
 
+function! s:merge_args(args)
+    let l:tmp = " "
+    for arg in a:args
+        let l:tmp = l:tmp." '".arg."'"
+    endfor
+    return l:tmp
+endfunction
+
 function! s:extractTask(oriTask) abort
     let l:task = {
     \   "desc": a:oriTask["label"],
@@ -76,32 +84,32 @@ function! s:extractTask(oriTask) abort
     if has_key(a:oriTask, "type") && a:oriTask["type"] != "shell"
         return l:task
     endif
-    if has_key(a:oriTask, "command")
-        let l:task["command"] = a:oriTask["command"]
-        if has_key(a:oriTask, "args")
-            let l:task["command"] .= " ".join(a:oriTask["args"], " ")
-        endif
-    endif
     " whatever depends order, treat as sequence
     if (has_key(a:oriTask, "dependsOn"))
         let l:task["depends"] = a:oriTask["dependsOn"]
     endif
+    if has_key(a:oriTask, "command")
+        let l:task["command"] = a:oriTask["command"]
+        if has_key(a:oriTask, "args")
+            let l:task["command"] .= s:merge_args(a:oriTask["args"])
+        endif
+    endif
     if has("unix") && has_key(a:oriTask, "linux") && has_key(a:oriTask["linux"], "command")
         let l:task["command"] = a:oriTask["linux"]["command"]
         if has_key(a:oriTask["linux"], "args")
-            let l:task["command"] .= " ".join(a:oriTask["linux"]["args"], " ")
+            let l:task["command"] .= s:merge_args(a:oriTask["linux"]["args"])
         endif
     endif
     if has("mac") && has_key(a:oriTask, "osx") && has_key(a:oriTask["osx"], "command")
         let l:task["command"] = a:oriTask["osx"]["command"]
         if has_key(a:oriTask["osx"], "args")
-            let l:task["command"] .= " ".join(a:oriTask[["osx"]"args"], " ")
+            let l:task["command"] .= s:merge_args(a:oriTask["osx"]["args"])
         endif
     endif
     if (has("win32") || has("win64")) && has_key(a:oriTask, "windows") && has_key(a:oriTask["windows"], "command")
         let l:task["command"] = a:oriTask["windows"]["command"]
         if has_key(a:oriTask["windows"], "args")
-            let l:task["command"] .= " ".join(a:oriTask["windows"]["args"], " ")
+            let l:task["command"] .= s:merge_args(a:oriTask["windows"]["args"])
         endif
     endif
     return l:task
@@ -172,7 +180,6 @@ function! tinySpy#runTask() abort
     endif
     for depend_run_cmd in l:depends_run_cmd
         call s:termRun(depend_run_cmd)
-        call input("enter to continue")
     endfor
     call s:termRun(l:run_cmd)
 endfunction
