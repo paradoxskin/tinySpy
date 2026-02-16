@@ -281,7 +281,18 @@ function! s:userCommand(cmd, args) abort
     return substitute(system(cmd." ".args), "\n", "", "g")
 endfunction
 
+" 必须在exit_cb外部调用，套了一个timer不然不会被视为finish状态
+" 在finish后，当文本内容发生改动，buftype会被改成 ""(普通文件)
+" 如需要改变该行为，请自行修改src/terminal.c +4223
+function! s:finish_cb(buf, ...) abort
+    call term_wait(a:buf, 2000)
+    if exists("*g:TinySpyHandler")
+        call g:TinySpyHandler(a:buf)
+    endif
+endfunction
+
 function! s:run_next_cmd(...) abort
+    call timer_start(0, function("s:finish_cb", [s:now_buf]))
     call remove(s:cmd_to_run, 0)
     call remove(s:desc_to_run, 0)
     if len(s:cmd_to_run) == 0
@@ -299,11 +310,11 @@ function! s:termRun(command) abort
     endif
     call win_gotoid(win_getid(max_win))
     let l:cmd = "cd ".shellescape(s:workspace_path)." && ".a:command.";echo [i] done."
-    call term_start(["bash", "-c", l:cmd], {
+    let s:now_buf = term_start(["bash", "-c", l:cmd], {
     \   "term_name": s:desc_to_run[0],
     \   "term_rows": 9,
     \   "exit_cb": function("s:run_next_cmd"),
-    \   "curwin": 1
+    \   "curwin": 1,
     \})
     call win_gotoid(win_getid(now_win))
 endfunction
